@@ -76,7 +76,7 @@ A dedicated checklist and deliverables breakdown is available in [`SUBMISSION.md
 
 ## 6. Live Product URL
 
-- **Production Deployment**: `https://gdocs-editor.vercel.app` *(or your local host at `http://localhost:3000`)*
+- **Production Deployment**: `https://hanoi-ai-editor.vercel.app` *(or your local host at `http://localhost:3000`)*
 - **API Server**: `http://localhost:8000` *(proxied automatically via Next.js rewrites)*
 
 ---

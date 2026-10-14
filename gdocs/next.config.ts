@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "https://gdoc-web.onrender.com/api/:path*",
+        destination: "http://localhost:8000/api/:path*",
       },
     ];
   },

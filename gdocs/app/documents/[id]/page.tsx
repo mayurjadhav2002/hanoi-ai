@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   FileText,
   Share2,
@@ -14,6 +15,10 @@ import {
   Download,
   FileCode,
   MessageSquare,
+  Star,
+  Lock,
+  PanelLeft,
+  Sparkles,
 } from "lucide-react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useBroadcastEvent, useEventListener } from "@liveblocks/react";
@@ -24,6 +29,15 @@ import { AttachmentsDrawer } from "@/components/AttachmentsDrawer";
 import { ActiveAvatars } from "@/components/ActiveAvatars";
 import { CommentsOverlay } from "@/components/CommentsOverlay";
 import { LiveblocksWrapper } from "@/components/LiveblocksWrapper";
+import { GoogleDocsMenuBar } from "@/components/GoogleDocsMenuBar";
+import { GoogleDocsToolbar } from "@/components/GoogleDocsToolbar";
+import {
+  DocumentOutlineSidebar,
+  DocumentTab,
+} from "@/components/DocumentOutlineSidebar";
+import { WordCountModal } from "@/components/WordCountModal";
+import { PageNumberModal, PageNumberSettings } from "@/components/PageNumberModal";
+import { AiAgentSidebar } from "@/components/AiAgentSidebar";
 
 interface DocumentWorkspaceProps {
   initialDocument: any;
@@ -42,18 +56,50 @@ function DocumentWorkspace({
 
   const [document, setDocument] = useState<any>(initialDocument);
   const [title, setTitle] = useState(initialDocument?.title || "Untitled Document");
+  const [isStarred, setIsStarred] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(
     initialDocument?.updatedAt ? new Date(initialDocument.updatedAt) : null
   );
 
+  const [editorInstance, setEditorInstance] = useState<any>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isAttachmentsOpen, setIsAttachmentsOpen] = useState(false);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
-  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
-  const [exportingFormat, setExportingFormat] = useState<string | null>(null);
+  const [isWordCountOpen, setIsWordCountOpen] = useState(false);
+  const [isPageNumberModalOpen, setIsPageNumberModalOpen] = useState(false);
+  const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
 
-  const exportMenuRef = useRef<HTMLDivElement>(null);
+  // Keyboard shortcut Ctrl+J / Cmd+J to toggle AI Assistant
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setIsAiSidebarOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Margins & Page Numbering Settings
+  const [leftMargin, setLeftMargin] = useState(64);
+  const [rightMargin, setRightMargin] = useState(64);
+  const [pageNumberSettings, setPageNumberSettings] = useState<PageNumberSettings | null>(null);
+
+  // View state & Google Docs sidebar
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showRuler, setShowRuler] = useState(true);
+  const [showHeader, setShowHeader] = useState(true);
+  const [showFooter, setShowFooter] = useState(true);
+  const [zoom, setZoom] = useState(100);
+
+  // Document Tabs & Headings Outline
+  const [tabs, setTabs] = useState<DocumentTab[]>([
+    { id: "tab-1", name: "Main Document" },
+  ]);
+  const [activeTabId, setActiveTabId] = useState("tab-1");
+
   const latestContentRef = useRef<any>(initialDocument?.content || null);
 
   // Liveblocks real-time title synchronization across peers
@@ -65,60 +111,57 @@ function DocumentWorkspace({
     }
   });
 
-  // Handle title edit with instant live broadcast
   const handleTitleChange = (newTitle: string) => {
     setTitle(newTitle);
     broadcast({ type: "TITLE_CHANGED", title: newTitle });
   };
 
-  // Close export dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        exportMenuRef.current &&
-        !exportMenuRef.current.contains(event.target as Node)
-      ) {
-        setIsExportMenuOpen(false);
-      }
-    }
-    if (isExportMenuOpen) {
-      window.document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      window.document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isExportMenuOpen]);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Debounced auto-save handler for document content
   const handleContentChange = useCallback(
-    async (content: any, plainText: string) => {
+    (content: any, plainText: string) => {
       latestContentRef.current = content;
       if (role === "VIEWER") return;
-      setIsSaving(true);
 
-      try {
-        const token = await getToken();
-        await apiFetch(`/api/documents/${documentId}`, {
-          method: "PATCH",
-          token,
-          devUser: user
-            ? {
-                id: user.id,
-                email: user?.primaryEmailAddress?.emailAddress || "",
-                name: user.fullName || "",
-              }
-            : undefined,
-          body: JSON.stringify({ content, plainText }),
-        });
-        setLastSaved(new Date());
-      } catch (err) {
-        console.error("Failed to auto-save document:", err);
-      } finally {
-        setIsSaving(false);
+      setIsSaving(true);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
+
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          const token = await getToken();
+          await apiFetch(`/api/documents/${documentId}`, {
+            method: "PATCH",
+            token,
+            devUser: user
+              ? {
+                  id: user.id,
+                  email: user?.primaryEmailAddress?.emailAddress || "",
+                  name: user.fullName || "",
+                }
+              : undefined,
+            body: JSON.stringify({ content, plainText }),
+          });
+          setLastSaved(new Date());
+        } catch (err) {
+          console.error("Failed to auto-save document:", err);
+        } finally {
+          setIsSaving(false);
+        }
+      }, 1500);
     },
     [documentId, role, user, getToken]
   );
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Title persistence on blur
   const handleTitleBlur = async () => {
@@ -144,10 +187,8 @@ function DocumentWorkspace({
     }
   };
 
-  // Document export handler supporting PDF, DOCX, and Markdown
+  // Document export handler
   const handleExport = async (format: "pdf" | "docx" | "md") => {
-    setIsExportMenuOpen(false);
-    setExportingFormat(format);
     try {
       const token = await getToken();
       const userEmail = user?.primaryEmailAddress?.emailAddress;
@@ -195,190 +236,307 @@ function DocumentWorkspace({
     } catch (err: any) {
       console.error("Export error:", err);
       alert(err?.message || "Failed to export document.");
-    } finally {
-      setExportingFormat(null);
+    }
+  };
+
+  // Add new tab handler
+  const handleAddTab = () => {
+    const newName = `Tab ${tabs.length + 1}`;
+    const newId = `tab-${Date.now()}`;
+    const newTab: DocumentTab = {
+      id: newId,
+      name: newName,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newId);
+    if (editorInstance) {
+      editorInstance
+        .chain()
+        .focus()
+        .insertContent(`<h2>${newName}</h2><p></p>`)
+        .run();
+    }
+  };
+
+  const handleSelectTab = (tabId: string) => {
+    setActiveTabId(tabId);
+    const tab = tabs.find((t) => t.id === tabId);
+    if (tab) {
+      handleHeadingClick(tabId, tab.name);
+    }
+  };
+
+  const handleRenameTab = (tabId: string, newName: string) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, name: newName } : t))
+    );
+  };
+
+  const handleDeleteTab = (tabId: string) => {
+    setTabs((prev) => {
+      const filtered = prev.filter((t) => t.id !== tabId);
+      if (activeTabId === tabId && filtered.length > 0) {
+        setActiveTabId(filtered[0].id);
+      }
+      return filtered;
+    });
+  };
+
+  const handlePrint = () => {
+    const cleanTitle = (title || document?.title || "Document").trim();
+    const prevTitle = window.document.title;
+    window.document.title = cleanTitle;
+    window.print();
+    setTimeout(() => {
+      window.document.title = prevTitle;
+    }, 1000);
+  };
+
+  // Smooth scroll to heading in document
+  const handleHeadingClick = (_id: string, text: string) => {
+    const elements = window.document.querySelectorAll("h1, h2, h3");
+    for (let el of Array.from(elements)) {
+      if (el.textContent?.trim() === text.trim()) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        break;
+      }
     }
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
-      {/* Top Navigation Header */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 shadow-xs">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => router.push("/")}
-            className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
-            title="Back to Dashboard"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
-            <FileText className="h-5 w-5" />
-          </div>
-
-          <div>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={title}
-                disabled={role === "VIEWER"}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                onBlur={handleTitleBlur}
-                className="rounded px-1.5 py-0.5 text-base font-semibold text-slate-800 hover:bg-slate-100 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-sm sm:max-w-md transition"
-              />
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                {role}
-              </span>
-            </div>
-            <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 pl-1">
-              {isSaving ? (
-                <>
-                  <Cloud className="h-3 w-3 animate-pulse text-blue-500" />
-                  <span>Saving changes...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="h-3 w-3 text-green-500" />
-                  <span>
-                    {lastSaved
-                      ? `Saved at ${lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                      : "All changes saved"}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          {/* Live presence avatars */}
-          <ActiveAvatars />
-
-          {/* Export Dropdown Menu */}
-          <div className="relative" ref={exportMenuRef}>
+    <div className="flex flex-col min-h-screen bg-[#f8fafd] print:bg-white print:min-h-0 print:p-0">
+      {/* 1. GOOGLE DOCS TOP APPLICATION BAR */}
+      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-2xs select-none print:hidden">
+        <div className="flex items-center justify-between px-3 py-1.5">
+          {/* Left: Hanoi AI Logo + Title + Menu Bar */}
+          <div className="flex items-start space-x-2.5">
+            {/* Hanoi AI Brand & Logo */}
             <button
-              onClick={() => setIsExportMenuOpen((prev) => !prev)}
-              disabled={!!exportingFormat}
-              className="flex items-center space-x-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-2xs disabled:opacity-50"
-              title="Export document"
+              onClick={() => router.push("/")}
+              className="mt-0.5 flex items-center space-x-2 rounded-lg py-1 px-1.5 hover:bg-slate-100 transition shrink-0 group"
+              title="Hanoi AI home"
             >
-              {exportingFormat ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
-              ) : (
-                <Download className="h-3.5 w-3.5 text-slate-600" />
-              )}
-              <span>
-                {exportingFormat ? `Exporting ${exportingFormat.toUpperCase()}...` : "Export"}
-              </span>
-              <ChevronDown className="h-3 w-3 text-slate-400" />
+              <Image
+                src="/logo_transparent_bg.png"
+                alt="Hanoi AI"
+                width={30}
+                height={30}
+                className="h-7 w-auto object-contain shrink-0 group-hover:scale-105 transition-transform"
+                priority
+              />
+              <div className="hidden sm:flex items-baseline space-x-1 select-none pr-1">
+                <span className="text-base font-extrabold text-slate-900 tracking-tight font-sans">
+                  Hanoi
+                </span>
+                <span className="text-base font-medium text-slate-500 tracking-tight font-sans">
+                  AI
+                </span>
+              </div>
             </button>
 
-            {isExportMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Export Document As
+            {/* Title & Menus Stack */}
+            <div className="flex flex-col">
+              {/* Title row */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={title}
+                  disabled={role === "VIEWER"}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  onBlur={handleTitleBlur}
+                  className="rounded px-1.5 py-0.5 text-base font-semibold text-slate-800 hover:bg-slate-100 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-sm sm:max-w-md transition"
+                />
+                {/* Star Button */}
+                <button
+                  onClick={() => setIsStarred((prev) => !prev)}
+                  className={`p-1 rounded hover:bg-slate-100 transition ${
+                    isStarred ? "text-amber-500" : "text-slate-400 hover:text-slate-600"
+                  }`}
+                  title={isStarred ? "Starred" : "Star document"}
+                >
+                  <Star className={`h-4 w-4 ${isStarred ? "fill-amber-400 text-amber-500" : ""}`} />
+                </button>
+
+                {/* Cloud Save Status Indicator */}
+                <div className="flex items-center space-x-1 text-[11px] text-slate-400 pl-1">
+                  {isSaving ? (
+                    <>
+                      <Cloud className="h-3 w-3 animate-pulse text-blue-500" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud className="h-3 w-3 text-slate-400" />
+                      <span className="hidden sm:inline">
+                        {lastSaved ? "Saved to Drive" : "All changes saved"}
+                      </span>
+                    </>
+                  )}
                 </div>
 
-                {/* PDF Option */}
-                <button
-                  onClick={() => handleExport("pdf")}
-                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition group"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-red-50 text-red-600 group-hover:bg-red-100">
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-800">PDF Document</div>
-                      <div className="text-[10px] text-slate-400">Portable Document (.pdf)</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                    .pdf
-                  </span>
-                </button>
-
-                {/* DOCX Option */}
-                <button
-                  onClick={() => handleExport("docx")}
-                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition group"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600 group-hover:bg-blue-100">
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-800">Word Document</div>
-                      <div className="text-[10px] text-slate-400">Microsoft Word (.docx)</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                    .docx
-                  </span>
-                </button>
-
-                {/* Markdown Option */}
-                <button
-                  onClick={() => handleExport("md")}
-                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition group"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100">
-                      <FileCode className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-800">Markdown</div>
-                      <div className="text-[10px] text-slate-400">Formatted text (.md)</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                    .md
-                  </span>
-                </button>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                  {role}
+                </span>
               </div>
-            )}
+
+              {/* Menu Bar: File, Edit, View, Insert, Format, Tools, Help */}
+              <GoogleDocsMenuBar
+                editor={editorInstance}
+                title={title}
+                onExport={handleExport}
+                onPrint={handlePrint}
+                onNewDocument={() => router.push("/")}
+                onOpenDashboard={() => router.push("/")}
+                onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+                isSidebarOpen={isSidebarOpen}
+                showRuler={showRuler}
+                onToggleRuler={() => setShowRuler((prev) => !prev)}
+                showHeader={showHeader}
+                onToggleHeader={() => setShowHeader((prev) => !prev)}
+                showFooter={showFooter}
+                onToggleFooter={() => setShowFooter((prev) => !prev)}
+                onOpenWordCount={() => setIsWordCountOpen(true)}
+                onOpenComments={() => setIsCommentsOpen(true)}
+                onOpenPageNumbers={() => setIsPageNumberModalOpen(true)}
+                onToggleAi={() => setIsAiSidebarOpen((prev) => !prev)}
+                isAiOpen={isAiSidebarOpen}
+              />
+            </div>
           </div>
 
-          {/* Comments button */}
-          <button
-            onClick={() => setIsCommentsOpen(true)}
-            className="flex items-center space-x-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-2xs"
-          >
-            <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
-            <span>Comments</span>
-          </button>
+          {/* Right: Presence Avatars + Comments + Attachments + Gemini AI + Google Docs Share Pill */}
+          <div className="flex items-center space-x-2">
+            {/* Live presence avatar stack */}
+            <ActiveAvatars />
 
-          {/* Attachments drawer button */}
-          <button
-            onClick={() => setIsAttachmentsOpen(true)}
-            className="flex items-center space-x-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-2xs"
-          >
-            <Paperclip className="h-3.5 w-3.5 text-slate-500" />
-            <span>Attachments</span>
-          </button>
+            {/* Comments button */}
+            <button
+              onClick={() => setIsCommentsOpen(true)}
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition"
+              title="Open comments"
+            >
+              <MessageSquare className="h-4 w-4 text-blue-600" />
+            </button>
 
-          {/* Share button */}
-          <button
-            onClick={() => setIsShareOpen(true)}
-            className="flex items-center space-x-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition shadow-2xs"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            <span>Share</span>
-          </button>
+            {/* Attachments drawer button */}
+            <button
+              onClick={() => setIsAttachmentsOpen(true)}
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition"
+              title="Attachments"
+            >
+              <Paperclip className="h-4 w-4 text-slate-500" />
+            </button>
+
+            {/* Hanoi AI Assistant Pill Button */}
+            <button
+              onClick={() => setIsAiSidebarOpen((prev) => !prev)}
+              className={`flex items-center space-x-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition shadow-2xs ${
+                isAiSidebarOpen
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-linear-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200 text-indigo-700 hover:from-indigo-100 hover:to-purple-100"
+              }`}
+              title="Hanoi AI Assistant (Ctrl+J)"
+            >
+              <Sparkles className={`h-3.5 w-3.5 ${isAiSidebarOpen ? "text-white" : "text-indigo-600 animate-pulse"}`} />
+              <span className="hidden sm:inline font-medium">Hanoi AI</span>
+            </button>
+
+            {/* Google Docs Primary Share Pill Button */}
+            <button
+              onClick={() => setIsShareOpen(true)}
+              className="flex items-center space-x-1.5 rounded-full bg-[#c2e7ff] text-[#001d35] px-4 py-2 text-xs font-semibold hover:bg-[#b3dcf7] transition shadow-xs"
+              title="Share document"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span>Share</span>
+            </button>
+          </div>
         </div>
+
+        {/* 2. GOOGLE DOCS ACTION TOOLBAR RIBBON */}
+        <GoogleDocsToolbar
+          editor={editorInstance}
+          onPrint={handlePrint}
+          onOpenComments={() => setIsCommentsOpen(true)}
+          zoom={zoom}
+          onZoomChange={setZoom}
+          onToggleAi={() => setIsAiSidebarOpen((prev) => !prev)}
+          isAiOpen={isAiSidebarOpen}
+        />
       </header>
 
-      {/* TipTap Rich Editor */}
-      <main className="flex-1">
-        <TipTapEditor
-          initialContent={document.content}
-          rawHtml={document.content?.rawHtml}
-          editable={role !== "VIEWER"}
-          onContentChange={handleContentChange}
-        />
-      </main>
+      {/* 3. MAIN WORKSPACE WITH LEFT SIDEBAR (TABS & OUTLINE) AND CANVAS */}
+      <div className="flex flex-1 relative">
+        {/* Left Side Toggle Button (when sidebar is closed) */}
+        {!isSidebarOpen && (
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="fixed left-2 top-[120px] z-30 p-2 bg-white rounded-full border border-slate-200 shadow-md text-slate-600 hover:text-blue-600 hover:bg-slate-50 transition print:hidden"
+            title="Show document tabs and outline"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+        )}
 
-      {/* Share Modal */}
+        {/* Document Tabs Sidebar */}
+        <DocumentOutlineSidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelectTab={handleSelectTab}
+          onAddTab={handleAddTab}
+          onRenameTab={handleRenameTab}
+          onDeleteTab={handleDeleteTab}
+        />
+
+        {/* Editor Sheet Canvas Area */}
+        <main className="flex-1 flex flex-col items-center print:p-0 print:m-0 print:w-full print:block print:bg-white">
+          <TipTapEditor
+            initialContent={document.content}
+            rawHtml={document.content?.rawHtml}
+            editable={role !== "VIEWER"}
+            onContentChange={handleContentChange}
+            onEditorReady={setEditorInstance}
+            showRuler={showRuler}
+            showHeader={showHeader}
+            showFooter={showFooter}
+            zoom={zoom}
+            leftMargin={leftMargin}
+            rightMargin={rightMargin}
+            onMarginsChange={(left, right) => {
+              setLeftMargin(left);
+              setRightMargin(right);
+            }}
+            pageNumberSettings={pageNumberSettings}
+          />
+        </main>
+
+        {/* Right Side Toggle Button (when Hanoi AI sidebar is closed) */}
+        {!isAiSidebarOpen && (
+          <button
+            onClick={() => setIsAiSidebarOpen(true)}
+            className="fixed right-2 top-[120px] z-30 p-2 bg-white rounded-full border border-slate-200 shadow-md text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition print:hidden group"
+            title="Open Hanoi AI Assistant"
+          >
+            <Sparkles className="h-4 w-4 text-indigo-600 animate-pulse group-hover:scale-110 transition-transform" />
+          </button>
+        )}
+
+        {/* Right Sidebar: Hanoi AI Assistant (Docked symmetrically with Document Tabs) */}
+        <AiAgentSidebar
+          isOpen={isAiSidebarOpen}
+          onClose={() => setIsAiSidebarOpen(false)}
+          editor={editorInstance}
+          documentTitle={title}
+          documentId={documentId}
+          userId={user?.id}
+          userEmail={user?.primaryEmailAddress?.emailAddress}
+          userName={user?.fullName || ""}
+        />
+      </div>
+
+      {/* Modals & Overlays */}
       <ShareModal
         documentId={documentId}
         isOpen={isShareOpen}
@@ -386,18 +544,29 @@ function DocumentWorkspace({
         collaborators={document.collaborators}
       />
 
-      {/* Comments & Discussion Threads Overlay */}
       <CommentsOverlay
         isOpen={isCommentsOpen}
         onClose={() => setIsCommentsOpen(false)}
       />
 
-      {/* Attachments Drawer */}
       <AttachmentsDrawer
         documentId={documentId}
         isOpen={isAttachmentsOpen}
         onClose={() => setIsAttachmentsOpen(false)}
         canEdit={role !== "VIEWER"}
+      />
+
+      <WordCountModal
+        isOpen={isWordCountOpen}
+        onClose={() => setIsWordCountOpen(false)}
+        editor={editorInstance}
+      />
+
+      <PageNumberModal
+        isOpen={isPageNumberModalOpen}
+        onClose={() => setIsPageNumberModalOpen(false)}
+        currentSettings={pageNumberSettings}
+        onApply={(settings) => setPageNumberSettings(settings)}
       />
     </div>
   );
@@ -413,13 +582,13 @@ function DocumentEditorContent() {
   const [document, setDocument] = useState<any>(null);
   const [role, setRole] = useState<string>("OWNER");
   const [isLoading, setIsLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
 
-  // Fetch document
+  // Fetch document only once on mount
   useEffect(() => {
-    if (!documentId) return;
+    if (!documentId || hasLoadedRef.current) return;
 
     async function loadDoc() {
-      setIsLoading(true);
       try {
         const token = await getToken();
         const userEmail = user?.primaryEmailAddress?.emailAddress;
@@ -432,6 +601,7 @@ function DocumentEditorContent() {
 
         setDocument(res.document);
         setRole(res.role || "OWNER");
+        hasLoadedRef.current = true;
       } catch (err) {
         console.error("Failed to load document:", err);
       } finally {
@@ -442,11 +612,11 @@ function DocumentEditorContent() {
     if (user !== undefined) {
       loadDoc();
     }
-  }, [documentId, user, getToken]);
+  }, [documentId, user]);
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 font-medium text-sm">
+      <div className="flex h-screen items-center justify-center bg-[#f8fafd] text-slate-500 font-medium text-sm">
         Opening document...
       </div>
     );
@@ -454,13 +624,13 @@ function DocumentEditorContent() {
 
   if (!document) {
     return (
-      <div className="flex flex-col h-screen items-center justify-center bg-slate-50 gap-4">
+      <div className="flex flex-col h-screen items-center justify-center bg-[#f8fafd] gap-4">
         <p className="text-slate-600 font-medium">
           Document not found or access denied.
         </p>
         <button
           onClick={() => router.push("/")}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium"
         >
           Return to Dashboard
         </button>
@@ -483,7 +653,7 @@ export default function DocumentEditorPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-400">
+        <div className="flex h-screen items-center justify-center bg-[#f8fafd] text-slate-400">
           Loading editor...
         </div>
       }

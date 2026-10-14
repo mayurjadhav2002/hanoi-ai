@@ -9,6 +9,7 @@ import folderRoutes from "./routes/folders.js";
 import invitationRoutes from "./routes/invitations.js";
 import fileRoutes from "./routes/files.js";
 import liveblocksRoutes from "./routes/liveblocks.js";
+import aiRoutes from "./routes/ai.js";
 
 const app = express();
 const port = process.env.BACKEND_PORT || 8000;
@@ -42,6 +43,7 @@ app.use("/api/folders", folderRoutes);
 app.use("/api/invitations", invitationRoutes);
 app.use("/api/files", fileRoutes);
 app.use("/api/liveblocks-auth", liveblocksRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -53,7 +55,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 if (process.env.NODE_ENV !== "test") {
   app.listen(port, () => {
-    console.log(`🚀 GDocs Backend Server running on http://localhost:${port}`);
+    console.log(`🚀 Hanoi AI Backend Server running on http://localhost:${port}`);
   });
 }
 

@@ -5,6 +5,8 @@ node_modules/
 # Environment secrets
 .env
 .env.*
+*.env
+screenshots/*.env
 !.env.example
 backend/.env
 gdocs/.env

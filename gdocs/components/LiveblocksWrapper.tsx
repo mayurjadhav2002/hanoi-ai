@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useCallback } from "react";
 import {
   LiveblocksProvider,
   RoomProvider,
@@ -18,102 +18,108 @@ export function LiveblocksWrapper({ children, roomId }: LiveblocksWrapperProps) 
   const { getToken } = useAuth();
   const { user } = useUser();
 
-  const authEndpoint = async (room?: string) => {
-    const token = await getToken();
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+  const userEmail = user?.primaryEmailAddress?.emailAddress;
+  const userName = user?.fullName;
+  const userAvatar = user?.imageUrl;
+  const userId = user?.id;
 
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-      if (user?.primaryEmailAddress?.emailAddress) {
-        headers["x-user-email"] = user.primaryEmailAddress.emailAddress;
-      }
-      if (user?.fullName) {
-        headers["x-user-name"] = user.fullName;
-      }
-      if (user?.imageUrl) {
-        headers["x-user-avatar"] = user.imageUrl;
-      }
-    } else {
-      headers["x-dev-user-id"] = user?.id || "dev_editor";
-      headers["x-dev-user-email"] = user?.primaryEmailAddress?.emailAddress || "editor@gdocs.app";
-      headers["x-dev-user-name"] = user?.fullName || "Collaborator";
-      if (user?.imageUrl) {
-        headers["x-user-avatar"] = user.imageUrl;
-      }
-    }
-
-    const res = await fetch("/api/liveblocks-auth", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ room }),
-    });
-    return await res.json();
-  };
-
-  const resolveUsers = async ({ userIds }: { userIds: string[] }) => {
-    try {
+  const authEndpoint = useCallback(
+    async (room?: string) => {
       const token = await getToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      const res = await fetch(
-        `/api/liveblocks-auth/resolve-users?ids=${encodeURIComponent(userIds.join(","))}`,
-        { headers }
-      );
-      if (res.ok) {
-        const users = await res.json();
-        return userIds.map((id, index) => {
-          if (user && (id === user.id || id === "dev_editor")) {
-            return {
-              name: user.fullName || user.primaryEmailAddress?.emailAddress || "You",
-              avatar:
-                user.imageUrl ||
-                `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.fullName || user.id)}`,
-            };
-          }
-          return (
-            users[index] || {
-              name: "Collaborator",
-              avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(id)}`,
-            }
-          );
-        });
-      }
-    } catch (err) {
-      console.error("[Liveblocks] Error resolving users:", err);
-    }
-
-    return userIds.map((id) => {
-      if (user && (id === user.id || id === "dev_editor")) {
-        return {
-          name: user.fullName || user.primaryEmailAddress?.emailAddress || "You",
-          avatar:
-            user.imageUrl ||
-            `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.fullName || user.id)}`,
-        };
-      }
-      return {
-        name: "Collaborator",
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(id)}`,
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
       };
-    });
-  };
 
-  const resolveMentionSuggestions = async ({ text }: { text: string; roomId: string }) => {
-    try {
-      const res = await fetch(
-        `/api/liveblocks-auth/mention-suggestions?text=${encodeURIComponent(text)}`
-      );
-      if (res.ok) {
-        return await res.json();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        if (userEmail) headers["x-user-email"] = userEmail;
+        if (userName) headers["x-user-name"] = userName;
+        if (userAvatar) headers["x-user-avatar"] = userAvatar;
+      } else {
+        headers["x-dev-user-id"] = userId || "dev_editor";
+        headers["x-dev-user-email"] = userEmail || "editor@hanoiai.app";
+        headers["x-dev-user-name"] = userName || "Collaborator";
+        if (userAvatar) headers["x-user-avatar"] = userAvatar;
       }
-    } catch (err) {
-      console.error("[Liveblocks] Error resolving mentions:", err);
-    }
-    return [];
-  };
+
+      const res = await fetch("/api/liveblocks-auth", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ room }),
+      });
+      return await res.json();
+    },
+    [getToken, userEmail, userName, userAvatar, userId]
+  );
+
+  const resolveUsers = useCallback(
+    async ({ userIds }: { userIds: string[] }) => {
+      try {
+        const token = await getToken();
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const res = await fetch(
+          `/api/liveblocks-auth/resolve-users?ids=${encodeURIComponent(userIds.join(","))}`,
+          { headers }
+        );
+        if (res.ok) {
+          const users = await res.json();
+          return userIds.map((id, index) => {
+            if (userId && (id === userId || id === "dev_editor")) {
+              return {
+                name: userName || userEmail || "You",
+                avatar:
+                  userAvatar ||
+                  `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(userName || userId)}`,
+              };
+            }
+            return (
+              users[index] || {
+                name: "Collaborator",
+                avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(id)}`,
+              }
+            );
+          });
+        }
+      } catch (err) {
+        console.error("[Liveblocks] Error resolving users:", err);
+      }
+
+      return userIds.map((id) => {
+        if (userId && (id === userId || id === "dev_editor")) {
+          return {
+            name: userName || userEmail || "You",
+            avatar:
+              userAvatar ||
+              `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(userName || userId)}`,
+          };
+        }
+        return {
+          name: "Collaborator",
+          avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(id)}`,
+        };
+      });
+    },
+    [getToken, userId, userName, userEmail, userAvatar]
+  );
+
+  const resolveMentionSuggestions = useCallback(
+    async ({ text }: { text: string; roomId: string }) => {
+      try {
+        const res = await fetch(
+          `/api/liveblocks-auth/mention-suggestions?text=${encodeURIComponent(text)}`
+        );
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch (err) {
+        console.error("[Liveblocks] Error resolving mentions:", err);
+      }
+      return [];
+    },
+    []
+  );
 
   return (
     <LiveblocksProvider

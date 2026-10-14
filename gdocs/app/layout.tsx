@@ -15,8 +15,17 @@ const geistMono = Geist_Mono({
 import { ClerkProvider } from "@clerk/nextjs";
 
 export const metadata: Metadata = {
-  title: "GDocs | Collaborative Document Editor",
-  description: "Real-time collaborative document editor with TipTap, Liveblocks, and Clerk",
+  title: "Hanoi AI | Collaborative Document Editor",
+  description: "Real-time collaborative document editor with TipTap, Liveblocks, and Hanoi AI co-writer",
+  icons: {
+    icon: [
+      { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.ico" },
+      { url: "/logo_transparent_bg.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -30,6 +39,12 @@ export default function RootLayout({
         lang="en"
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       >
+        <head>
+          <link rel="icon" type="image/png" sizes="32x32" href="/icon.png" />
+          <link rel="icon" type="image/png" href="/logo_transparent_bg.png" />
+          <link rel="shortcut icon" href="/favicon.ico" />
+          <link rel="apple-touch-icon" href="/icon.png" />
+        </head>
         <body className="min-h-full flex flex-col">{children}</body>
       </html>
     </ClerkProvider>

@@ -164,3 +164,84 @@ body {
   user-select: none;
   white-space: nowrap;
 }
+
+/* Dedicated Print Media Styles */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0mm !important; /* Disables browser-generated header (title/date) and footer (URL with document ID) */
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Isolate only the document sheet - hides all browser UI, sidebars, Clerk thumbnails, and presence */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .document-sheet,
+  .document-sheet * {
+    visibility: visible !important;
+  }
+
+  /* Position document sheet cleanly on the printed page */
+  .document-sheet {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding-top: 15mm !important;
+    padding-bottom: 15mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+  }
+
+  /* Hide buttons, edit badges, placeholders, and toolbars inside the sheet */
+  button,
+  .print-hide,
+  .no-print,
+  .lb-thread,
+  .lb-composer,
+  .lb-portal,
+  .collaboration-cursor__caret,
+  .collaboration-cursor__label {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Hide input placeholders when printing */
+  input::placeholder {
+    color: transparent !important;
+    opacity: 0 !important;
+  }
+
+  /* Clean headings and tables for page breaks */
+  .tiptap h1, .tiptap h2, .tiptap h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .tiptap table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .tiptap tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

@@ -1,4 +1,4 @@
-# Google Docs Collaborative Editor
+# Hanoi AI - Collaborative Document Editor
 
 A production-ready collaborative document editor inspired by Google Docs, built with **Next.js 16 (Turbopack)**, **Node.js / Express**, **TipTap**, **Liveblocks**, **Prisma ORM**, and **PostgreSQL**.
 
@@ -25,6 +25,7 @@ For an in-depth breakdown of the data schemas, real-time collaboration pipeline,
   - Export documents to **PDF**, **DOCX**, and **Markdown** formats.
 - **Document Attachments**: Upload attachments to Supabase Storage with real-time percentage progress bars.
 - **Folders, Search & Organization**: Organize documents in folders, search by title, and sort.
+- **Gemini AI Document Assistant**: Right-side collapsible AI chat agent powered by OpenAI (`gpt-4o-mini`). Highlights active selections, fixes grammar & spelling, elevates tone to executive/professional, drafts sections, and provides 1-click **[ ✨ Apply to Document ]** synchronized across all multiplayer peers.
 
 ---
 
@@ -82,11 +83,15 @@ SUPABASE_BUCKET=attachments
 # Email Delivery via Gmail App Password (Nodemailer - delivers to any recipient)
 GMAIL_USER=your_email@gmail.com
 GMAIL_APP_PASSWORD=your_16_char_google_app_password
-SMTP_FROM="GDocs <your_email@gmail.com>"
+SMTP_FROM="Hanoi AI <your_email@gmail.com>"
 
 # Alternative: Resend API (Sandbox only sends to account owner unless custom domain is verified)
 RESEND_API_KEY=your_resend_api_key
 RESEND_FROM_EMAIL=onboarding@resend.dev
+
+# OpenAI AI Agent Configuration (Optional - built-in fallback simulation included)
+OPENAI_API_KEY="sk-..."
+OPENAI_MODEL="gpt-4o-mini"
 ```
 
 ### 3. Database Migration
@@ -131,6 +136,32 @@ To verify the Next.js production build:
 cd gdocs
 npm run build
 ```
+
+---
+
+## Cloud Deployment & Email Delivery Notes
+
+> [!WARNING]
+> **Important Note for Free Cloud Deployments (e.g., Render, Vercel, Railway):**
+> 
+> 1. **Raw SMTP Ports Blocked on Free Cloud Tiers (`ETIMEDOUT`)**:
+>    Free cloud hosts like **Render Free Web Services** block outbound raw TCP traffic on standard SMTP ports (**25, 465, and 587**) by platform policy to prevent spambots. If you deploy the backend to a free Render instance using Gmail Nodemailer, you will see this in the logs:
+>    ```
+>    [Mailer] SMTP connection failed/blocked (ETIMEDOUT). Cloud hosts like Render free tier block outbound SMTP ports 25/465/587.
+>    ```
+>    *(Note: This timeout only happens on free cloud tiers. Running locally on your machine with `GMAIL_APP_PASSWORD` works seamlessly because home/office networks do not block port 587).*
+>
+> 2. **Resend Sandbox Domain Restriction**:
+>    To handle cloud environments where SMTP ports are blocked, the codebase automatically falls back to **Resend** over **HTTPS (Port 443)**.
+>    However, in free Resend sandbox mode (`onboarding@resend.dev`), Resend strictly restricts outbound delivery to the **registered account owner's email address**. Sending an invite to any other email will return:
+>    ```
+>    [Resend Mailer Sandbox Restriction] You can only send testing emails to your own email address...
+>    ```
+>
+> 3. **How Invitations Still Work Without Failure**:
+>    - **Instant 1-Click Direct Link**: The backend immediately saves the invitation to PostgreSQL and generates a shareable link (`/documents/invite?token=...`). The inviter can simply click **"Copy Link"** in the Share modal to send the link directly to collaborators via chat or Slack.
+>    - **Dashboard Invitations Tab**: Existing users will also see pending invitations directly inside their Dashboard to Accept or Decline.
+>    - **Production Fix**: To deliver real emails to any recipient in cloud production, verify a custom domain in [Resend](https://resend.com/domains) and set `RESEND_FROM_EMAIL="Hanoi AI <invites@yourdomain.com>"`.
 
 ---
 

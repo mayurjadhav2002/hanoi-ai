@@ -103,4 +103,38 @@ describe("Backend API Integration Tests", () => {
     expect(res.body.invitation).toBeDefined();
     expect(res.body.invitation.email).toBe("collaborator@example.com");
   }, 20000);
+
+  it("POST /api/ai/chat returns structured editing action for grammar fixes", async () => {
+    const res = await request(app)
+      .post("/api/ai/chat")
+      .send({
+        messages: [{ role: "user", content: "fix grammar and spelling" }],
+        documentContext: {
+          title: "Project Proposal",
+          selectedText: "this are bad grammar text",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe("assistant");
+    expect(res.body.action).toBeDefined();
+    expect(res.body.action.type).toBe("replace_selection");
+  });
+
+  it("POST /api/ai/chat returns structured action for document summary", async () => {
+    const res = await request(app)
+      .post("/api/ai/chat")
+      .send({
+        messages: [{ role: "user", content: "summarize this document" }],
+        documentContext: {
+          title: "Quarterly Goals",
+          fullText: "Goal 1: Launch MVP. Goal 2: Expand to enterprise.",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe("assistant");
+    expect(res.body.action).toBeDefined();
+    expect(res.body.action.content).toContain("Executive Summary");
+  });
 });

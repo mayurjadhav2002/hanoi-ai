@@ -101,7 +101,7 @@ export async function sendCollaborationInviteEmail({
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; color: #1f2937;">
       <div style="text-align: center; margin-bottom: 24px;">
-        <h2 style="color: #2563eb; margin: 0;">GDocs Collaboration</h2>
+        <h2 style="color: #2563eb; margin: 0;">Hanoi AI Collaboration</h2>
       </div>
       <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
         <h3 style="margin-top: 0; color: #111827; font-size: 20px;">
@@ -130,7 +130,7 @@ export async function sendCollaborationInviteEmail({
   if (gmailUser && gmailPass) {
     try {
       const client = await getTransporter();
-      const fromAddress = process.env.SMTP_FROM || `GDocs <${gmailUser}>`;
+      const fromAddress = process.env.SMTP_FROM || `Hanoi AI <${gmailUser}>`;
 
       const info = await client.sendMail({
         from: fromAddress,
@@ -156,7 +156,7 @@ export async function sendCollaborationInviteEmail({
   if (resend) {
     try {
       const response = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || "GDocs <onboarding@resend.dev>",
+        from: process.env.RESEND_FROM_EMAIL || "Hanoi AI <onboarding@resend.dev>",
         to: [to],
         subject: `${inviterName} invited you to collaborate on "${documentTitle}"`,
         html,
@@ -176,7 +176,7 @@ export async function sendCollaborationInviteEmail({
   // 3. Fallback to Nodemailer preview
   try {
     const client = await getTransporter();
-    const fromAddress = process.env.SMTP_FROM || `"GDocs" <no-reply@gdocs.app>`;
+    const fromAddress = process.env.SMTP_FROM || `"Hanoi AI" <no-reply@hanoiai.app>`;
     const info = await client.sendMail({
       from: fromAddress,
       to,
@@ -230,7 +230,7 @@ export async function sendPendingDocumentsSummaryEmail({
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; color: #1f2937;">
-      <h2 style="color: #2563eb; margin: 0 0 16px;">Welcome to GDocs, ${userName}!</h2>
+      <h2 style="color: #2563eb; margin: 0 0 16px;">Welcome to Hanoi AI, ${userName}!</h2>
       <p style="color: #4b5563; font-size: 15px;">
         You have pending collaboration invites waiting for your review:
       </p>
@@ -249,9 +249,9 @@ export async function sendPendingDocumentsSummaryEmail({
   if (resend) {
     try {
       const data = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || "GDocs <onboarding@resend.dev>",
+        from: process.env.RESEND_FROM_EMAIL || "Hanoi AI <onboarding@resend.dev>",
         to: [to],
-        subject: `Welcome to GDocs! You have ${pendingDocuments.length} pending document invitation(s)`,
+        subject: `Welcome to Hanoi AI! You have ${pendingDocuments.length} pending document invitation(s)`,
         html,
       });
       return { success: true, messageId: data.data?.id };
@@ -263,12 +263,12 @@ export async function sendPendingDocumentsSummaryEmail({
   try {
     const client = await getTransporter();
     const gmailUser = process.env.GMAIL_USER || process.env.SMTP_USER;
-    const fromAddress = process.env.SMTP_FROM || (gmailUser ? `GDocs <${gmailUser}>` : `"GDocs" <no-reply@gdocs.app>`);
+    const fromAddress = process.env.SMTP_FROM || (gmailUser ? `Hanoi AI <${gmailUser}>` : `"Hanoi AI" <no-reply@hanoiai.app>`);
 
     const info = await client.sendMail({
       from: fromAddress,
       to,
-      subject: `Welcome to GDocs! You have ${pendingDocuments.length} pending document invitation(s)`,
+      subject: `Welcome to Hanoi AI! You have ${pendingDocuments.length} pending document invitation(s)`,
       html,
     });
 

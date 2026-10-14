@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   FileText,
   Plus,
@@ -72,7 +73,7 @@ export default function DashboardPage() {
     try {
       const token = await getToken();
       const userEmail =
-        user?.primaryEmailAddress?.emailAddress || "owner@gdocs.app";
+        user?.primaryEmailAddress?.emailAddress || "owner@hanoiai.app";
       const userPayload = user
         ? { id: user.id, email: userEmail, name: user.fullName || undefined }
         : undefined;
@@ -314,14 +315,22 @@ export default function DashboardPage() {
       <aside className="w-64 border-r border-slate-200 bg-white flex flex-col justify-between shadow-xs">
         <div>
           {/* Brand */}
-          <div className="flex items-center space-x-2.5 px-6 py-5 border-b border-slate-100">
-            <div>
-              <h1 className="text-base font-bold text-slate-900 tracking-tight leading-none">
-                GDocs
-              </h1>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Real-time collaboration
-              </p>
+          <div className="flex items-center space-x-3 px-5 py-4 border-b border-slate-100">
+            <Image
+              src="/logo_transparent_bg.png"
+              alt="Hanoi AI"
+              width={34}
+              height={34}
+              className="h-8.5 w-auto object-contain shrink-0"
+              priority
+            />
+            <div className="flex items-baseline space-x-1.5 select-none">
+              <span className="text-xl font-extrabold text-slate-900 tracking-tight font-sans">
+                Hanoi
+              </span>
+              <span className="text-xl font-medium text-slate-500 tracking-tight font-sans">
+                AI
+              </span>
             </div>
           </div>
 
