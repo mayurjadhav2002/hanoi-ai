@@ -11,6 +11,7 @@ import {
   MousePointer,
   Zap,
   CheckCircle2,
+  Check,
 } from "lucide-react";
 
 export interface AiAction {
@@ -20,11 +21,23 @@ export interface AiAction {
   originalText?: string;
 }
 
+export interface AiSuggestion {
+  id: string;
+  msgId: string;
+  type: "replace_selection" | "insert_content" | "append_section" | "rewrite_document";
+  summary: string;
+  originalText?: string;
+  content: string;
+  status: "pending" | "accepted" | "rejected";
+  range?: { from: number; to: number };
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   action?: AiAction | null;
+  suggestion?: AiSuggestion | null;
   timestamp: Date;
   typingCompleted?: boolean;
 }
@@ -38,6 +51,8 @@ interface AiAgentSidebarProps {
   userId?: string;
   userEmail?: string;
   userName?: string;
+  onActiveSuggestionChange?: (suggestion: AiSuggestion | null) => void;
+  onSuggestionDecisionRef?: React.MutableRefObject<((decision: "accept" | "reject") => void) | null>;
 }
 
 const QUICK_PROMPTS = [
@@ -57,6 +72,8 @@ export function AiAgentSidebar({
   userId,
   userEmail,
   userName,
+  onActiveSuggestionChange,
+  onSuggestionDecisionRef,
 }: AiAgentSidebarProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -67,6 +84,7 @@ export function AiAgentSidebar({
       typingCompleted: true,
     },
   ]);
+  const [activeSuggestion, setActiveSuggestion] = useState<AiSuggestion | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isTypingInDoc, setIsTypingInDoc] = useState(false);
@@ -176,7 +194,96 @@ export function AiAgentSidebar({
     };
   }, [documentId]);
 
-  // Gradual typing engine: streams words/tokens into TipTap so Liveblocks Yjs syncs live to all peers
+  // Accept AI suggestion: unsets the highlight and locks content permanently into the document
+  const handleAcceptSuggestion = useCallback(
+    (sug: AiSuggestion) => {
+      if (editor && sug.range) {
+        try {
+          const docSize = editor.state.doc.content.size;
+          const safeFrom = Math.min(Math.max(0, sug.range.from), docSize);
+          const safeTo = Math.min(Math.max(safeFrom, sug.range.to), docSize);
+          if (safeTo > safeFrom) {
+            editor
+              .chain()
+              .focus()
+              .setTextSelection({ from: safeFrom, to: safeTo })
+              .unsetHighlight()
+              .setTextSelection(safeTo)
+              .run();
+          }
+        } catch (e) {
+          console.warn("Could not unset highlight:", e);
+        }
+      }
+
+      setActiveSuggestion(null);
+      if (onActiveSuggestionChange) onActiveSuggestionChange(null);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === sug.msgId
+            ? { ...m, suggestion: { ...sug, status: "accepted" } }
+            : m
+        )
+      );
+    },
+    [editor, onActiveSuggestionChange]
+  );
+
+  // Reject AI suggestion: reverts the suggested range back to originalText
+  const handleRejectSuggestion = useCallback(
+    (sug: AiSuggestion) => {
+      if (editor && sug.range) {
+        try {
+          const docSize = editor.state.doc.content.size;
+          const safeFrom = Math.min(Math.max(0, sug.range.from), docSize);
+          const safeTo = Math.min(Math.max(safeFrom, sug.range.to), docSize);
+          if (safeTo > safeFrom) {
+            editor
+              .chain()
+              .focus()
+              .setTextSelection({ from: safeFrom, to: safeTo })
+              .deleteSelection()
+              .run();
+
+            if (sug.originalText) {
+              editor.chain().focus().insertContent(sug.originalText).run();
+            }
+          }
+        } catch (e) {
+          console.warn("Could not revert suggestion:", e);
+        }
+      }
+
+      setActiveSuggestion(null);
+      if (onActiveSuggestionChange) onActiveSuggestionChange(null);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === sug.msgId
+            ? { ...m, suggestion: { ...sug, status: "rejected" } }
+            : m
+        )
+      );
+    },
+    [editor, onActiveSuggestionChange]
+  );
+
+  // Wire decision ref so top canvas banner can accept/reject
+  useEffect(() => {
+    if (onSuggestionDecisionRef) {
+      onSuggestionDecisionRef.current = (decision: "accept" | "reject") => {
+        if (!activeSuggestion) return;
+        if (decision === "accept") {
+          handleAcceptSuggestion(activeSuggestion);
+        } else {
+          handleRejectSuggestion(activeSuggestion);
+        }
+      };
+    }
+  }, [activeSuggestion, handleAcceptSuggestion, handleRejectSuggestion, onSuggestionDecisionRef]);
+
+  // Gradual typing engine: preserves rich HTML (H1/H2, lists, colors, formatting) and applies suggestion highlight
   const streamTypingIntoDocument = useCallback(
     async (action: AiAction, msgId: string) => {
       if (!editor) return;
@@ -185,61 +292,121 @@ export function AiAgentSidebar({
       setIsTypingInDoc(true);
       setTypingStatusText(action.summary || "Writing into document...");
 
-      // Clean HTML tags into semantic chunks or text tokens
-      // For rich formatting, parse into clean paragraphs / heading blocks
       const cleanContent = action.content;
+      let originalText = action.originalText || "";
+      let startPos = editor.state.selection.from;
 
       try {
-        // If replacing a selection: delete the current selection first
         if (action.type === "replace_selection") {
           const { from, to } = editor.state.selection;
           if (from !== to) {
+            startPos = from;
+            originalText = editor.state.doc.textBetween(from, to, " ");
             editor.chain().focus().deleteRange({ from, to }).run();
+          } else if (action.originalText) {
+            // Find location of originalText in the document
+            const fullDocText = editor.state.doc.textBetween(0, editor.state.doc.content.size, "\n");
+            const matchIndex = fullDocText.indexOf(action.originalText.trim());
+            if (matchIndex !== -1) {
+              let cur = 0;
+              let targetFrom = from;
+              let targetTo = to;
+              editor.state.doc.descendants((node: any, pos: number) => {
+                if (node.isText) {
+                  const text = node.text || "";
+                  if (matchIndex >= cur && matchIndex < cur + text.length) {
+                    targetFrom = pos + (matchIndex - cur);
+                    targetTo = targetFrom + action.originalText!.trim().length;
+                    return false;
+                  }
+                  cur += text.length;
+                } else if (node.isBlock) {
+                  cur += 1;
+                }
+              });
+              if (targetFrom < targetTo) {
+                startPos = targetFrom;
+                editor.chain().focus().deleteRange({ from: targetFrom, to: targetTo }).run();
+              }
+            }
           }
         } else if (action.type === "append_section") {
-          // Move cursor to end of document
           const docSize = editor.state.doc.content.size;
+          startPos = docSize;
           editor.chain().focus().setTextSelection(docSize).run();
         } else if (action.type === "rewrite_document") {
+          startPos = 0;
+          originalText = editor.state.doc.textBetween(0, editor.state.doc.content.size, "\n");
           editor.chain().focus().clearContent().run();
         }
 
-        // Tokenize content into words and whitespace/tags for gradual natural typing
-        // Extract words while preserving spaces:
-        // If content has HTML tags, break into words or chunks
-        const tempDiv = document.createElement("div");
-        tempDiv.innerHTML = cleanContent;
-        const plainText = tempDiv.innerText || tempDiv.textContent || cleanContent;
-        const words = plainText.match(/\S+\s*|\s+/g) || [plainText];
+        // Parse HTML into top-level blocks or elements to preserve rich formatting
+        const parser = new DOMParser();
+        const parsedDoc = parser.parseFromString(cleanContent, "text/html");
+        const blocks = Array.from(parsedDoc.body.children);
 
-        let index = 0;
-        await new Promise<void>((resolve) => {
-          activeIntervalRef.current = setInterval(() => {
-            if (stopTypingRef.current || index >= words.length) {
-              if (activeIntervalRef.current) clearInterval(activeIntervalRef.current);
-              activeIntervalRef.current = null;
-              resolve();
-              return;
-            }
+        const insertionStart = editor.state.selection.from;
 
-            const token = words[index];
-            editor.chain().focus().insertContent(token).run();
-            index++;
-          }, 35); // 35ms per word (~30 words/sec, natural collaborative typing speed)
-        });
+        if (blocks.length > 1) {
+          // Stream block-by-block with rich HTML preserved
+          for (const block of blocks) {
+            if (stopTypingRef.current) break;
+            editor.chain().focus().insertContent(block.outerHTML).run();
+            await new Promise((r) => setTimeout(r, 80));
+          }
+        } else {
+          // Single element or inline content: insert full rich HTML cleanly
+          editor.chain().focus().insertContent(cleanContent).run();
+        }
 
-        // Mark message as completed in state
+        const insertionEnd = editor.state.selection.to;
+
+        // Apply a distinct soft suggestion highlight to the newly edited/inserted content
+        try {
+          if (insertionEnd > insertionStart) {
+            editor
+              .chain()
+              .setTextSelection({ from: insertionStart, to: insertionEnd })
+              .setHighlight({ color: "#e0e7ff" })
+              .setTextSelection(insertionEnd)
+              .run();
+          }
+        } catch (hErr) {
+          console.warn("Could not set suggestion highlight:", hErr);
+        }
+
+        const suggestion: AiSuggestion = {
+          id: `sug-${Date.now()}`,
+          msgId,
+          type: action.type,
+          summary: action.summary,
+          originalText,
+          content: cleanContent,
+          status: "pending",
+          range: { from: insertionStart, to: insertionEnd },
+        };
+
+        setActiveSuggestion(suggestion);
+
         setMessages((prev) =>
-          prev.map((m) => (m.id === msgId ? { ...m, typingCompleted: true } : m))
+          prev.map((m) =>
+            m.id === msgId
+              ? { ...m, suggestion, typingCompleted: true }
+              : m
+          )
         );
+
+        if (onActiveSuggestionChange) {
+          onActiveSuggestionChange(suggestion);
+        }
       } catch (err) {
-        console.error("Gradual typing error:", err);
+        console.error("Rich HTML insertion error:", err);
       } finally {
         setIsTypingInDoc(false);
         setTypingStatusText("");
       }
     },
-    [editor]
+    [editor, onActiveSuggestionChange]
   );
 
   const handleStopTyping = () => {
@@ -547,23 +714,56 @@ export function AiAgentSidebar({
                     {renderFormattedText(msg.content)}
                   </div>
 
-                  {/* Typing confirmation & Undo option */}
+                  {/* Suggestion review card with Accept / Reject */}
                   {msg.action && (
-                    <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
-                      <div className="flex items-center space-x-1 text-emerald-700">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span className="font-medium text-[10px]">
-                          {msg.typingCompleted ? "Written to document" : "Writing in progress..."}
-                        </span>
+                    <div className="rounded-xl border border-indigo-100 bg-white p-2.5 shadow-2xs space-y-2 mt-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center space-x-1 text-indigo-700 font-medium">
+                          <Sparkles className="h-3 w-3 text-indigo-500" />
+                          <span>{msg.action.summary || "Suggested Edit"}</span>
+                        </div>
+                        {msg.suggestion?.status === "accepted" ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-[10px] flex items-center space-x-1">
+                            <Check className="h-2.5 w-2.5" />
+                            <span>Accepted</span>
+                          </span>
+                        ) : msg.suggestion?.status === "rejected" ? (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium text-[10px] flex items-center space-x-1">
+                            <X className="h-2.5 w-2.5" />
+                            <span>Rejected</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium text-[10px]">
+                            Reviewing
+                          </span>
+                        )}
                       </div>
-                      <button
-                        onClick={handleUndo}
-                        className="flex items-center space-x-0.5 text-[10px] text-slate-400 hover:text-slate-700 transition"
-                        title="Undo this change"
-                      >
-                        <Undo2 className="h-2.5 w-2.5" />
-                        <span>Undo edit</span>
-                      </button>
+
+                      {msg.action.originalText && (
+                        <div className="text-[10px] bg-rose-50/70 border border-rose-100 rounded p-1.5 text-rose-800 line-through truncate max-h-12 overflow-hidden">
+                          {msg.action.originalText}
+                        </div>
+                      )}
+
+                      {/* Accept & Reject Buttons if pending */}
+                      {msg.suggestion?.status === "pending" && (
+                        <div className="flex items-center space-x-1.5 pt-1">
+                          <button
+                            onClick={() => handleAcceptSuggestion(msg.suggestion!)}
+                            className="flex-1 flex items-center justify-center space-x-1 py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition shadow-2xs active:scale-95"
+                          >
+                            <Check className="h-3 w-3" />
+                            <span>Accept</span>
+                          </button>
+                          <button
+                            onClick={() => handleRejectSuggestion(msg.suggestion!)}
+                            className="flex-1 flex items-center justify-center space-x-1 py-1.5 px-2.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 text-[11px] font-medium border border-slate-200 transition active:scale-95"
+                          >
+                            <X className="h-3 w-3" />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

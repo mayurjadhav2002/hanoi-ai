@@ -19,6 +19,7 @@ import {
   Lock,
   PanelLeft,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useBroadcastEvent, useEventListener } from "@liveblocks/react";
@@ -36,8 +37,11 @@ import {
   DocumentTab,
 } from "@/components/DocumentOutlineSidebar";
 import { WordCountModal } from "@/components/WordCountModal";
-import { PageNumberModal, PageNumberSettings } from "@/components/PageNumberModal";
-import { AiAgentSidebar } from "@/components/AiAgentSidebar";
+import {
+  PageNumberModal,
+  PageNumberSettings,
+} from "@/components/PageNumberModal";
+import { AiAgentSidebar, AiSuggestion } from "@/components/AiAgentSidebar";
 
 interface DocumentWorkspaceProps {
   initialDocument: any;
@@ -55,11 +59,13 @@ function DocumentWorkspace({
   const { user } = useUser();
 
   const [document, setDocument] = useState<any>(initialDocument);
-  const [title, setTitle] = useState(initialDocument?.title || "Untitled Document");
+  const [title, setTitle] = useState(
+    initialDocument?.title || "Untitled Document",
+  );
   const [isStarred, setIsStarred] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(
-    initialDocument?.updatedAt ? new Date(initialDocument.updatedAt) : null
+    initialDocument?.updatedAt ? new Date(initialDocument.updatedAt) : null,
   );
 
   const [editorInstance, setEditorInstance] = useState<any>(null);
@@ -69,6 +75,11 @@ function DocumentWorkspace({
   const [isWordCountOpen, setIsWordCountOpen] = useState(false);
   const [isPageNumberModalOpen, setIsPageNumberModalOpen] = useState(false);
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  const [activeAiSuggestion, setActiveAiSuggestion] =
+    useState<AiSuggestion | null>(null);
+  const suggestionDecisionRef = useRef<
+    ((decision: "accept" | "reject") => void) | null
+  >(null);
 
   // Keyboard shortcut Ctrl+J / Cmd+J to toggle AI Assistant
   useEffect(() => {
@@ -85,7 +96,8 @@ function DocumentWorkspace({
   // Margins & Page Numbering Settings
   const [leftMargin, setLeftMargin] = useState(64);
   const [rightMargin, setRightMargin] = useState(64);
-  const [pageNumberSettings, setPageNumberSettings] = useState<PageNumberSettings | null>(null);
+  const [pageNumberSettings, setPageNumberSettings] =
+    useState<PageNumberSettings | null>(null);
 
   // View state & Google Docs sidebar
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -152,7 +164,7 @@ function DocumentWorkspace({
         }
       }, 1500);
     },
-    [documentId, role, user, getToken]
+    [documentId, role, user, getToken],
   );
 
   useEffect(() => {
@@ -220,7 +232,9 @@ function DocumentWorkspace({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error || `Export failed with status ${res.status}`);
+        throw new Error(
+          errorData?.error || `Export failed with status ${res.status}`,
+        );
       }
 
       const blob = await res.blob();
@@ -268,7 +282,7 @@ function DocumentWorkspace({
 
   const handleRenameTab = (tabId: string, newName: string) => {
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, name: newName } : t))
+      prev.map((t) => (t.id === tabId ? { ...t, name: newName } : t)),
     );
   };
 
@@ -350,11 +364,15 @@ function DocumentWorkspace({
                 <button
                   onClick={() => setIsStarred((prev) => !prev)}
                   className={`p-1 rounded hover:bg-slate-100 transition ${
-                    isStarred ? "text-amber-500" : "text-slate-400 hover:text-slate-600"
+                    isStarred
+                      ? "text-amber-500"
+                      : "text-slate-400 hover:text-slate-600"
                   }`}
                   title={isStarred ? "Starred" : "Star document"}
                 >
-                  <Star className={`h-4 w-4 ${isStarred ? "fill-amber-400 text-amber-500" : ""}`} />
+                  <Star
+                    className={`h-4 w-4 ${isStarred ? "fill-amber-400 text-amber-500" : ""}`}
+                  />
                 </button>
 
                 {/* Cloud Save Status Indicator */}
@@ -437,7 +455,9 @@ function DocumentWorkspace({
               }`}
               title="Hanoi AI Assistant (Ctrl+J)"
             >
-              <Sparkles className={`h-3.5 w-3.5 ${isAiSidebarOpen ? "text-white" : "text-indigo-600 animate-pulse"}`} />
+              <Sparkles
+                className={`h-3.5 w-3.5 ${isAiSidebarOpen ? "text-white" : "text-indigo-600 animate-pulse"}`}
+              />
               <span className="hidden sm:inline font-medium">Hanoi AI</span>
             </button>
 
@@ -491,7 +511,40 @@ function DocumentWorkspace({
         />
 
         {/* Editor Sheet Canvas Area */}
-        <main className="flex-1 flex flex-col items-center print:p-0 print:m-0 print:w-full print:block print:bg-white">
+        <main className="flex-1 flex flex-col items-center print:p-0 print:m-0 print:w-full print:block print:bg-white relative">
+          {/* Floating AI Suggestion Decision Pill */}
+          {activeAiSuggestion && (
+            <div className="sticky top-2 z-30 mb-2 flex items-center justify-between rounded-full bg-slate-900/95 backdrop-blur-md text-white px-4 py-1.5 shadow-xl border border-indigo-400/40 max-w-xl mx-auto w-[90%] sm:w-auto animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center space-x-2 truncate pr-3">
+                <Sparkles className="h-4 w-4 text-indigo-400 animate-pulse shrink-0" />
+                <span className="text-xs truncate font-medium">
+                  Hanoi AI suggested:{" "}
+                  <strong className="text-indigo-200">
+                    {activeAiSuggestion.summary}
+                  </strong>
+                </span>
+              </div>
+              <div className="flex items-center space-x-1.5 shrink-0">
+                <button
+                  onClick={() => suggestionDecisionRef.current?.("accept")}
+                  className="flex items-center space-x-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full text-xs font-semibold shadow-xs transition active:scale-95"
+                  title="Accept suggestion"
+                >
+                  <Check className="h-3 w-3" />
+                  <span>Accept</span>
+                </button>
+                <button
+                  onClick={() => suggestionDecisionRef.current?.("reject")}
+                  className="flex items-center space-x-1 px-3 py-1 bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white rounded-full text-xs font-medium transition active:scale-95"
+                  title="Reject suggestion"
+                >
+                  <X className="h-3 w-3" />
+                  <span>Reject</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <TipTapEditor
             initialContent={document.content}
             rawHtml={document.content?.rawHtml}
@@ -533,6 +586,8 @@ function DocumentWorkspace({
           userId={user?.id}
           userEmail={user?.primaryEmailAddress?.emailAddress}
           userName={user?.fullName || ""}
+          onActiveSuggestionChange={setActiveAiSuggestion}
+          onSuggestionDecisionRef={suggestionDecisionRef}
         />
       </div>
 

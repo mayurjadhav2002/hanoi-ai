@@ -3,7 +3,12 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Underline } from "@tiptap/extension-underline";
-import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
+import {
+  Table,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from "@tiptap/extension-table";
 import { Highlight } from "@tiptap/extension-highlight";
 import { TextAlign } from "@tiptap/extension-text-align";
 import { Placeholder } from "@tiptap/extension-placeholder";
@@ -21,7 +26,12 @@ import { EditorView } from "@tiptap/pm/view";
 import { MessageSquare } from "lucide-react";
 import { FontSize } from "./FontSizeExtension";
 import { PageNumberSettings } from "./PageNumberModal";
-import { FontFamily, TextColor, LetterSpacing, LineHeight } from "./TypographyExtensions";
+import {
+  FontFamily,
+  TextColor,
+  LetterSpacing,
+  LineHeight,
+} from "./TypographyExtensions";
 
 // Prevents a matchesNode error on hot reloading
 if (typeof window !== "undefined" && EditorView.prototype) {
@@ -90,12 +100,17 @@ function Threads({ editor }: { editor: any }) {
             <span>No comments yet</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-            Create an inline comment by highlighting any text in the document and clicking the{" "}
-            <strong className="text-slate-700">Comment</strong> button in the toolbar.
+            Create an inline comment by highlighting any text in the document
+            and clicking the <strong className="text-slate-700">Comment</strong>{" "}
+            button in the toolbar.
           </p>
         </div>
       ) : (
-        <AnchoredThreads threads={threads} editor={editor} style={{ width: 350 }} />
+        <AnchoredThreads
+          threads={threads}
+          editor={editor}
+          style={{ width: 350 }}
+        />
       )}
     </div>
   );
@@ -222,7 +237,10 @@ function GoogleDocsRuler({
   );
 }
 
-function formatPageNumber(num: number, format?: "numbers" | "roman" | "letters"): string {
+function formatPageNumber(
+  num: number,
+  format?: "numbers" | "roman" | "letters",
+): string {
   if (format === "letters") {
     return String.fromCharCode(64 + Math.min(26, Math.max(1, num)));
   }
@@ -291,7 +309,8 @@ export function TipTapEditor({
     editable,
     editorProps: {
       attributes: {
-        class: "tiptap outline-none min-h-[850px] focus:outline-none font-sans text-[15px] leading-relaxed text-slate-900",
+        class:
+          "tiptap outline-none min-h-[850px] focus:outline-none font-sans text-[15px] leading-relaxed text-slate-900",
       },
     },
     extensions: [
@@ -405,9 +424,11 @@ export function TipTapEditor({
     ? formatPageNumber(pageNumberSettings.startAt, pageNumberSettings.format)
     : "";
   const showHeaderPageNumber =
-    pageNumberSettings?.position === "header" && pageNumberSettings.showOnFirstPage;
+    pageNumberSettings?.position === "header" &&
+    pageNumberSettings.showOnFirstPage;
   const showFooterPageNumber =
-    pageNumberSettings?.position === "footer" && pageNumberSettings.showOnFirstPage;
+    pageNumberSettings?.position === "footer" &&
+    pageNumberSettings.showOnFirstPage;
 
   return (
     <div className="flex flex-col w-full bg-[#f8fafd] min-h-screen relative print:bg-white print:min-h-0 print:p-0">
@@ -420,7 +441,10 @@ export function TipTapEditor({
       <div className="flex-1 py-8 px-4 flex justify-center items-start print:p-0 print:m-0 print:w-full print:block">
         <div
           className="relative flex justify-center items-start w-full max-w-[1280px] print:w-full print:max-w-none print:m-0 print:block"
-          style={{ transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined, transformOrigin: "top center" }}
+          style={{
+            transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
+            transformOrigin: "top center",
+          }}
         >
           <div className="w-full max-w-[850px] flex flex-col items-center print:w-full print:max-w-none print:m-0 print:block">
             {/* Google Docs Ruler */}
@@ -490,8 +514,8 @@ export function TipTapEditor({
                               pageNumberSettings?.alignment === "left"
                                 ? "order-first pr-2"
                                 : pageNumberSettings?.alignment === "center"
-                                ? "mx-auto"
-                                : "text-right"
+                                  ? "mx-auto"
+                                  : "text-right"
                             }`}
                           >
                             Page {pageNumberText}
@@ -514,8 +538,8 @@ export function TipTapEditor({
                             pageNumberSettings?.alignment === "left"
                               ? "order-first pr-2"
                               : pageNumberSettings?.alignment === "center"
-                              ? "mx-auto"
-                              : "text-right"
+                                ? "mx-auto"
+                                : "text-right"
                           }`}
                         >
                           Page {pageNumberText}
@@ -572,8 +596,8 @@ export function TipTapEditor({
                               pageNumberSettings?.alignment === "left"
                                 ? "order-first pr-2"
                                 : pageNumberSettings?.alignment === "center"
-                                ? "mx-auto"
-                                : "text-right"
+                                  ? "mx-auto"
+                                  : "text-right"
                             }`}
                           >
                             Page {pageNumberText}
@@ -611,8 +635,8 @@ export function TipTapEditor({
                             pageNumberSettings?.alignment === "left"
                               ? "order-first pr-2"
                               : pageNumberSettings?.alignment === "center"
-                              ? "mx-auto"
-                              : "text-right"
+                                ? "mx-auto"
+                                : "text-right"
                           }`}
                         >
                           Page {pageNumberText}
